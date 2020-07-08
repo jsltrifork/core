@@ -1,60 +1,82 @@
 """Platform for sensor integration."""
-from homeassistant.const import TEMP_CELSIUS
-from homeassistant.helpers.entity import Entity
+import logging
+
 import aiohttp
 from aiohttp import BasicAuth, ClientSession
-import logging
-from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import CONF_NAME
 import voluptuous as vol
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.entity import Entity
 
 _LOGGER = logging.getLogger(__name__)
 
 
-CONF_ATTRIBUTES = "Information provided by: https://futar.bkk.hu/"
-CONF_STOPID = "stopId"
-CONF_MINSAFTER = "minsAfter"
-CONF_WHEELCHAIR = "wheelchair"
-CONF_BIKES = "bikes"
-CONF_IGNORENOW = "ignoreNow"
-
-DEFAULT_NAME = "BKK Futar"
-DEFAULT_ICON = "mdi:bus"
-DEFAULT_UNIT = "min"
+CONF_URL = "url"
+CONF_SOURCES = "sources"
+CONF_DEVICE_ID = "deviceId"
+CONF_PLUGIN = "plugin"
+CONF_ITEM_ID = "itemId"
 
 
-# PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-#     {
-#         vol.Required(CONF_STOPID): cv.string,
-#         vol.Optional(CONF_MINSAFTER, default=20): cv.string,
-#         vol.Optional(CONF_WHEELCHAIR, default=False): cv.boolean,
-#         vol.Optional(CONF_BIKES, default=False): cv.boolean,
-#         vol.Optional(CONF_IGNORENOW, default="false"): cv.boolean,
-#         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-#     }
-# )
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+    {
+        vol.Required(CONF_URL): cv.string,
+        vol.Required(CONF_USERNAME): cv.string,
+        vol.Required(CONF_PASSWORD): cv.string,
+        vol.Optional(CONF_SOURCES): cv.ensure_list,
+    }
+)
 
 
 async def async_setup_platform(hass, config, add_entities, discovery_info=None):
     """Set up the sensor platform."""
-    # name = config.get(CONF_NAME)
-    # stopid = config.get(CONF_STOPID)
-    # minsafter = config.get(CONF_MINSAFTER)
-    # wheelchair = config.get(CONF_WHEELCHAIR)
-    # bikes = config.get(CONF_BIKES)
-    # ignorenow = config.get(CONF_IGNORENOW)
+    sia_url = config.get(CONF_URL)
+    username = config.get(CONF_USERNAME)
+    password = config.get(CONF_PASSWORD)
 
     session = hass.helpers.aiohttp_client.async_get_clientsession()
-    auth = aiohttp.BasicAuth("Trifork", password="Trifork")
+    auth = aiohttp.BasicAuth(username, password=password)
+
+    sources = config.get(CONF_SOURCES)
+    entities = []
+    for source in sources:
+        item_id = source[CONF_ITEM_ID]
+        device_id = source[CONF_DEVICE_ID]
+        plugin = source[CONF_PLUGIN]
+
+        # Get name and unit from SIA for source.
+        url = (
+            f"http://{sia_url}/api/plugins/{plugin}/devices/{device_id}/items/{item_id}"
+        )
+        try:
+            response = await session.get(url, auth=auth)
+            if response.status == 200:
+                json = await response.json()
+
+                name = json["name"]
+                unit = json["unit"]
+                entities.append(
+                    SIASensor(
+                        name, sia_url, plugin, device_id, item_id, session, auth, unit
+                    )
+                )
+            else:
+                _LOGGER.error(
+                    "Could not find plug, device or item: %s, %s, %s",
+                    plugin,
+                    device_id,
+                    item_id,
+                )
+
+        except aiohttp.ClientError as error:
+            _LOGGER.error(
+                "Could not set up source: %s, %s, %s", plugin, device_id, item_id
+            )
+            _LOGGER.debug(error)
 
     add_entities(
-        [
-            SIASensor(
-                "Room11sensor", "172.31.100.129", "bacnet_ip", 2, 13, session, auth
-            )
-        ],
-        update_before_add=True,
+        entities, update_before_add=True,
     )
 
 
@@ -68,8 +90,9 @@ class SIASensor(Entity):
     _item_id: int = None
     _session: ClientSession = None
     _auth: BasicAuth = None
+    _unit: str = None
 
-    def __init__(self, name, host, plugin, device_id, item_id, session, auth):
+    def __init__(self, name, host, plugin, device_id, item_id, session, auth, unit):
         """Initialize the sensor."""
         self._state = None
         self._host = host
@@ -79,6 +102,7 @@ class SIASensor(Entity):
         self._item_id = item_id
         self._session = session
         self._auth = auth
+        self._unit = unit
 
     @property
     def name(self):
@@ -93,7 +117,7 @@ class SIASensor(Entity):
     @property
     def unit_of_measurement(self):
         """Return the unit of measurement."""
-        return TEMP_CELSIUS
+        return self._unit
 
     async def async_update(self):
         """Fetch new state data for the sensor.
@@ -101,10 +125,10 @@ class SIASensor(Entity):
         """
 
         # Construct URL.
-        url = f"http://{self._host}/api/plugins/{self._plugin}/devices/{self._device_id}/items/{self._item_id}/data"
+        entity_url = f"http://{self._host}/api/plugins/{self._plugin}/devices/{self._device_id}/items/{self._item_id}/data"
 
         try:
-            response = await self._session.get(url, auth=self._auth)
+            response = await self._session.get(entity_url, auth=self._auth)
             json = await response.json()
             self._state = json["values"][0]["value"]
             _LOGGER.info("Updating sensor %s", self._name)
