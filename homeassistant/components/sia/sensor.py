@@ -3,30 +3,16 @@ import logging
 
 import aiohttp
 from aiohttp import BasicAuth, ClientSession
-import voluptuous as vol
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_URL
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
+from .const import SIA_SCHEMA, CONF_PLUGIN, CONF_DEVICE_ID, CONF_ITEM_ID, CONF_SOURCES
 
 _LOGGER = logging.getLogger(__name__)
 
 
-CONF_URL = "url"
-CONF_SOURCES = "sources"
-CONF_DEVICE_ID = "deviceId"
-CONF_PLUGIN = "plugin"
-CONF_ITEM_ID = "itemId"
-
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_URL): cv.string,
-        vol.Required(CONF_USERNAME): cv.string,
-        vol.Required(CONF_PASSWORD): cv.string,
-        vol.Optional(CONF_SOURCES): cv.ensure_list,
-    }
-)
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(SIA_SCHEMA)
 
 
 async def async_setup_platform(hass, config, add_entities, discovery_info=None):
