@@ -9,14 +9,19 @@
             "unknown": "[%key:common::config_flow::error::unknown%]"
         },
         "step": {
+            "sources": {
+                "title": "Select devices"
+            },
             "user": {
                 "data": {
-                    "host": "[%key:common::config_flow::data::host%]",
-                    "password": "[%key:common::config_flow::data::password%]",
-                    "username": "[%key:common::config_flow::data::username%]"
-                }
+                    "password": "Password",
+                    "url": "URL of the SIA platform",
+                    "username": "Username"
+                },
+                "description": "Please enter the user credentials to your SIA platform",
+                "title": "Connect to the SIA platform"
             }
         }
     },
-    "title": "SIA Module"
+    "title": "SIA Modules"
 }

@@ -1,13 +1,18 @@
 {
-  "title": "SIA Module",
+  "title": "SIA Modules",
   "config": {
     "step": {
       "user": {
+        "title": "Connect to the SIA platform",
+        "description": "Please enter the user credentials to your SIA platform",
         "data": {
-          "host": "[%key:common::config_flow::data::host%]",
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
+          "password": "Password",
+          "username": "Username",
+          "url": "URL of the SIA platform"
         }
+      },
+      "sources": {
+        "title": "Sources"
       }
     },
     "error": {

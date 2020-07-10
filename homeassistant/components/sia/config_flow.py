@@ -3,25 +3,18 @@ from .const import DOMAIN
 import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
-from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
+from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_URL
+from homeassistant import config_entries
+from aiohttp import ClientSession, BasicAuth
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_URL = "url"
 CONF_SOURCES = "sources"
 CONF_DEVICE_ID = "deviceId"
 CONF_PLUGIN = "plugin"
 CONF_ITEM_ID = "itemId"
 
-SOURCE_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_PLUGIN): cv.string,
-        vol.Required(CONF_DEVICE_ID): cv.string,
-        vol.Required(CONF_ITEM_ID): cv.string,
-    }
-)
-
-SIA_SCHEMA = {
+USER_SCHEMA = {
     vol.Required(CONF_URL): str,
     vol.Required(CONF_USERNAME): str,
     vol.Required(CONF_PASSWORD): str,
@@ -32,25 +25,43 @@ class SIAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Example config flow."""
 
     VERSION = 1
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
-    data = None
-    has_sources = True
+    url = None
+    username = None
+    password = None
+
+    sources = None
+    has_sources = False
 
     async def async_step_user(self, user_input=None):
         if not user_input:
+            # Propmt user for url, username and password.
             return self.async_show_form(
-                step_id="user", data_schema=vol.Schema(SIA_SCHEMA)
+                step_id="user", data_schema=vol.Schema(USER_SCHEMA)
             )
 
-        if not self.has_sources:
-            self.has_sources = True
-            return self.async_show_form(
-                step_id="user", data_schema=vol.Schema({vol.Required(CONF_URL): str})
-            )
-        _LOGGER.info(user_input)
+        url = "172.31.100.129"  # user_input[CONF_URL]
+        username = "Trifork"  # user_input[CONF_USERNAME]
+        password = "Trifork"  # user_input[CONF_PASSWORD]
 
-        return self.async_create_entry(
-            title="This is a title",
-            description="This is a description",
-            data=user_input,
+        sources_data = await self._get_init_info(url, username, password)
+
+        _LOGGER.info(sources_data)
+
+        return self.async_show_form(
+            step_id="sources", data_schema=vol.Schema({vol.Required(CONF_URL,): bool}),
         )
+
+    async def async_step_sources(self, user_input=None):
+        """Config flow step for when sources has been selected."""
+
+        return self.async_create_entry(title="SIA Module", data=user_input,)
+
+    async def _get_init_info(self, sia_url: str, username: str, password: str):
+        auth = BasicAuth(username, password=password)
+        url = f"http://{sia_url}/api/init"
+
+        async with ClientSession(auth=auth) as session:
+            async with session.get(url) as resp:
+                return await resp.json()
